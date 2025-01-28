@@ -196,4 +196,5 @@ Fixing the values of Kp_linear = 5 and Kp_angular = 9.5. As the tuning requirmen
 2. Final Values
    -The final values are as follows Kp_linear = 5, Kd_angular = 0.1, Kp_angular = 9.5, Kd_angular = 0.1. spacing = 0.5( to accomodate larger area) and max speed = 2.
    ![Screenshot from 2025-01-27 22-46-40](https://github.com/user-attachments/assets/950a8f1c-9e9c-4cfb-9db8-eaeb5e5f8526)
-
+3. Challenges
+   -Before starting off with the tuning process main challenge was setting up linux and ros2. After doing it tuning process was rather tedious as to I did an iterative process and did not follow any predefined methods like Ziegler–Nichols Tuning Method but rather it was more of an intuition based approach that I took. If I was to follow the same process I would have automated the task to find the best tuning parameters.
