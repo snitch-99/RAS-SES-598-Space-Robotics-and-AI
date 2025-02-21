@@ -23,245 +23,89 @@ The system includes an earthquake force generator that introduces external distu
 - Random variations in amplitude and phase
 - Additional Gaussian noise
 
-## Assignment Objectives
+## Submission
 
-### Core Requirements
-1. Analyze and tune the provided LQR controller to:
-   - Maintain the pendulum in an upright position
-   - Keep the cart within its ±2.5m physical limits
-   - Achieve stable operation under earthquake disturbances
-2. Document your LQR tuning approach:
-   - Analysis of the existing Q and R matrices
-   - Justification for any tuning changes made
-   - Analysis of performance trade-offs
-   - Experimental results and observations
-3. Analyze system performance:
-   - Duration of stable operation
-   - Maximum cart displacement
-   - Pendulum angle deviation
-   - Control effort analysis
+### Understanding LQR
+LQR controller stands for a Linear Quadratic Controller. As the name suggests it controlls a linear system by using a cost fucntion which is quadratic in nature. The most integral part of a LQR controller are the cost fucntions. As the name suggests cost functions are basically a penalty to the deviations from the setpoint (suppose origin). Usually in the real world to control an inherently unstable system or a stable system and make is more stable energy is required hence LQR controller puts up a constraint on the controller input too which means LQR penalizes large control inputs. 
 
-### Learning Outcomes
-- Understanding of LQR control parameters and their effects
-- Experience with competing control objectives
-- Analysis of system behavior under disturbances
-- Practical experience with ROS2 and Gazebo simulation
+The cost function is given by 
+J = ∫(x'Q x + u'R u)dt limits of the integral can be set accordingly. Q penalizes deviations in state variables and R penalizes the control input. From this we solve something called a Ricciati Equation and then we find the K which is our controller. 
 
-### Extra Credit Options
-Students can implement reinforcement learning for extra credit (up to 30 points):
+LQR controller is given by the equation
 
-1. Reinforcement Learning Implementation:
-   - Implement a basic DQN (Deep Q-Network) controller
-   - Train the agent to stabilize the pendulum
-   - Compare performance with the LQR controller
-   - Document training process and results
-   - Create training progress visualizations
-   - Analyze and compare performance with LQR
+u = -Kx
 
-## Implementation
+### System and Other Important matrices
+Our state space representation is as follows :
+x_dot = Ax + Bu.
 
-### Controller Description
-The package includes a complete LQR controller implementation (`lqr_controller.py`) with the following features:
-- State feedback control
-- Configurable Q and R matrices
-- Real-time force command generation
-- State estimation and processing
+Now we know we are using a LQR controller hence u = -Kx which gives us:
 
-Current default parameters:
-```python
-# State cost matrix Q (default values)
-Q = np.diag([1.0, 1.0, 10.0, 10.0])  # [x, x_dot, theta, theta_dot]
+x_dot = (A-B*K)x
 
-# Control cost R (default value)
-R = np.array([[0.1]])  # Control effort cost
-```
+First we verify if the system is controllable by finding the rank of the observability matrix A and B. If its rank is equal to the number of state variables we can make our system stable which we can do in our case.
 
-### Earthquake Disturbance
-The earthquake generator (`earthquake_force_generator.py`) provides realistic disturbances:
-- Configurable through ROS2 parameters
-- Default settings:
-  ```python
-  parameters=[{
-      'base_amplitude': 15.0,    # Strong force amplitude (N)
-      'frequency_range': [0.5, 4.0],  # Wide frequency range (Hz)
-      'update_rate': 50.0  # Update rate (Hz)
-  }]
-  ```
+Now what I do is I take a close look at the matrix (A - B*K). The eigen values of the matrix tell me stability of the system if they are in the left half plane my system is stable this is a crude way but is the one I followed to compute the gains. 
+To compute the eigenvalues I used matlab's eigen() function.
 
-## Getting Started
+### Computing state penalties
 
-### Prerequisites
-- ROS2 Humble or Jazzy
-- Gazebo Garden
-- Python 3.8+
-- Required Python packages: numpy, scipy
+Why change the default parameters ?
+Default parameters were Q = diag[1 1 10 10] and R = 0.1
+the eigen values are
 
-#### Installation Commands
-```bash
-# Set ROS_DISTRO as per your configuration
-export ROS_DISTRO=humble
+-11.9192 + 0.0000i
+-2.3126 + 1.5118i
+-2.3126 - 1.5118i
+-1.0229 + 0.0000i
 
-# Install ROS2 packages
-sudo apt update
-sudo apt install -y \
-    ros-$ROS_DISTRO-ros-gz-bridge \
-    ros-$ROS_DISTRO-ros-gz-sim \
-    ros-$ROS_DISTRO-ros-gz-interfaces \
-    ros-$ROS_DISTRO-robot-state-publisher \
-    ros-$ROS_DISTRO-rviz2
+system seems stable but it goes down after some seconds of operation. Hence what I try here if I could place an eigen value towards far left which increases the stability of the system while not letting any of the other eigen value to become positive.
 
-# Install Python dependencies
-pip3 install numpy scipy control
-```
+I start with penalizing x 
 
-### Repository Setup
+![image](https://github.com/user-attachments/assets/4e15aed3-9cab-4810-b0a7-9c6920e6b8f3)
 
-#### If you already have a fork of the course repository:
-```bash
-# Navigate to your local copy of the repository
-cd ~/RAS-SES-598-Space-Robotics-and-AI
+From this I observed that penalizing x does not do much to the eigen values i.e. making the system more stable. Therefore I take an intermediate value of 50 as x's penalty.
 
-# Add the original repository as upstream (if not already done)
-git remote add upstream https://github.com/DREAMS-lab/RAS-SES-598-Space-Robotics-and-AI.git
+Then I move on with penalizing x_dot
 
-# Fetch the latest changes from upstream
-git fetch upstream
+![image](https://github.com/user-attachments/assets/018ca5ab-7f34-436f-9589-5a4e178a2557)
 
-# Checkout your main branch
-git checkout main
+I see that increasing the penalty for x_dot also stats bringing an eigen value closer to the origin which means the system kind of it moving towards unstability. Hence I do not crank up the penalty but settle for x_dot's penalty to be 60.
 
-# Merge upstream changes
-git merge upstream/main
+Penalizing theta
 
-# Push the updates to your fork
-git push origin main
-```
+![image](https://github.com/user-attachments/assets/885f6607-f2bf-4a99-a103-78460d9a6abc)
 
-#### If you don't have a fork yet:
-1. Fork the course repository:
-   - Visit: https://github.com/DREAMS-lab/RAS-SES-598-Space-Robotics-and-AI
-   - Click "Fork" in the top-right corner
-   - Select your GitHub account as the destination
+Penalizing theta does not do much. It can be noticed when I penalize it with 500 units but still the eigen values do not change much. Therefor I settle for the default value for theta
 
-2. Clone your fork:
-```bash
-cd ~/
-git clone https://github.com/YOUR_USERNAME/RAS-SES-598-Space-Robotics-and-AI.git
-```
+Penalizing theta_dot
 
-### Create Symlink to ROS2 Workspace
-```bash
-# Create symlink in your ROS2 workspace
-cd ~/ros2_ws/src
-ln -s ~/RAS-SES-598-Space-Robotics-and-AI/assignments/cart_pole_optimal_control .
-```
+![image](https://github.com/user-attachments/assets/60df8359-9d25-46bc-8fdd-13d6001c4007)
 
-### Building and Running
-```bash
-# Build the package
-cd ~/ros2_ws
-colcon build --packages-select cart_pole_optimal_control --symlink-install
+Now when I start penalizing theta_dot my eigen value start moving towards far left. Not one pole starts deceasing. Noticing how moving from 200 - 500 eigen value almost doubles but the observable effect on the cart pole was minimal hence I settle for 100. Another reason for settling for this value is to keep this one root on the left half plane and also because after this the cart pole was observably stable.
 
-# Source the workspace
-source install/setup.bash
+Penalizing controller Input - 
 
-# Launch the simulation with visualization
-ros2 launch cart_pole_optimal_control cart_pole_rviz.launch.py
-```
+![image](https://github.com/user-attachments/assets/28430bb2-51e4-4536-a210-e7a2569295b4)
 
-This will start:
-- Gazebo simulation (headless mode)
-- RViz visualization showing:
-  * Cart-pole system
-  * Force arrows (control and disturbance forces)
-  * TF frames for system state
-- LQR controller
-- Earthquake force generator
-- Force visualizer
 
-### Visualization Features
-The RViz view provides a side perspective of the cart-pole system with:
+Eigen value moves towards far left as R decreases so why did I settle for R's default value. When I set R to be 0.01 the cart pole crashed and went down therefore I did not change its value.
 
-#### Force Arrows
-Two types of forces are visualized:
-1. Control Forces (at cart level):
-   - Red arrows: Positive control force (right)
-   - Blue arrows: Negative control force (left)
+### Output
 
-2. Earthquake Disturbances (above cart):
-   - Orange arrows: Positive disturbance (right)
-   - Purple arrows: Negative disturbance (left)
+Q matrix is diag (50,60,10,100) and R is 0.1
 
-Arrow lengths are proportional to force magnitudes.
+https://github.com/user-attachments/assets/e97a8984-76a9-4840-aae6-f96258e96a6f
 
-## Analysis Requirements
+Below shows how the force remains low throughout only sometimes crosses 50 N.
+![image](https://github.com/user-attachments/assets/77b439be-d730-4541-b6e8-d57be216be9b)
 
-### Performance Metrics
-Students should analyze:
-1. Stability Metrics:
-   - Maximum pole angle deviation
-   - RMS cart position error
-   - Peak control force used
-   - Recovery time after disturbances
+Below are the plots of  X, theta, X_dot and theta_dot which show that there is inital deviation after which the system becomes pretty stable
+![image](https://github.com/user-attachments/assets/17836392-f3f5-4068-9b19-b8df6ce21fca)
 
-2. System Constraints:
-   - Cart position limit: ±2.5m
-   - Control rate: 50Hz
-   - Pole angle stability
-   - Control effort efficiency
-
-### Analysis Guidelines
-1. Baseline Performance:
-   - Document system behavior with default parameters
-   - Identify key performance bottlenecks
-   - Analyze disturbance effects
-
-2. Parameter Effects:
-   - Analyze how Q matrix weights affect different states
-   - Study R value's impact on control aggressiveness
-   - Document trade-offs between objectives
-
-3. Disturbance Response:
-   - Characterize system response to different disturbance frequencies
-   - Analyze recovery behavior
-   - Study control effort distribution
-
-## Evaluation Criteria
-### Core Assignment (100 points)
-1. Analysis Quality (40 points)
-   - Depth of parameter analysis
-   - Quality of performance metrics
-   - Understanding of system behavior
-
-2. Performance Results (30 points)
-   - Stability under disturbances
-   - Constraint satisfaction
-   - Control efficiency
-
-3. Documentation (30 points)
-   - Clear analysis presentation
-   - Quality of data and plots
-   - Thoroughness of discussion
-
-### Extra Credit (up to 30 points)
-- Reinforcement Learning Implementation (30 points)
-
-## Tips for Success
-1. Start with understanding the existing controller behavior
-2. Document baseline performance thoroughly
-3. Make systematic parameter adjustments
-4. Keep detailed records of all tests
-5. Focus on understanding trade-offs
-6. Use visualizations effectively
-
-## Submission Requirements
-1. Technical report including:
-   - Analysis of controller behavior
-   - Performance data and plots
-   - Discussion of findings
-2. Video demonstration of system performance
-3. Any additional analysis tools or visualizations created
-
+### Challenges 
+While understanding LQR, one of the challenges was to understand Ricciati equation which I am still trying to figure out and with it the math behind finding K. Understanding the total cart pole system also did pose a challenge but its modular structure made me understand system and how data and messages flow between different nodes which I could use in my future projects.
 ## License
 This work is licensed under a [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
 [![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png)](http://creativecommons.org/licenses/by/4.0/) 
